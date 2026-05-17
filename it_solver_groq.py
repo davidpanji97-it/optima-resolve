@@ -122,8 +122,8 @@ if "uploader_key" not in st.session_state: st.session_state.uploader_key = 0
 if "first_prompt_pending" not in st.session_state: st.session_state.first_prompt_pending = False
 
 DATABASE_KARYAWAN = {
-    "12345": {"pass": "honda123", "nama": "Budi Santoso", "divisi": "Produksi", "telepon": "0812-333-444"},
-    "67890": {"pass": "honda123", "nama": "Siti Aminah", "divisi": "Finance", "telepon": "0856-777-888"},
+    "12345": {"pass": "yola123", "nama": "Yola Suryani", "divisi": "HR-Division", "telepon": "0812-333-444"},
+    "123456": {"pass": "honda123", "nama": "Public", "divisi": "Finance", "telepon": "0856-777-888"},
     "11223": {"pass": "honda123", "nama": "Andi Pratama", "divisi": "IT", "telepon": "0811-222-333"}
 }
 
