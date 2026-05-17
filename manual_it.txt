@@ -1,0 +1,4 @@
+- Kebijakan Password: Password harus diganti setiap 90 hari dan minimal 12 & simbol.
+- Jam Kerja IT: 08.00 on time 
+- Prosedur Kerusakan Laptop : Jika laptop rusak, user harus mengisi formulir di 'it-support.perusahaan.com' sebelum menyerahkan unit.
+- Develop Website ini: David William.
