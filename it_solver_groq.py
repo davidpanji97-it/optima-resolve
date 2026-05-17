@@ -123,7 +123,7 @@ if "first_prompt_pending" not in st.session_state: st.session_state.first_prompt
 
 DATABASE_KARYAWAN = {
     "12345": {"pass": "yola123", "nama": "Yola Suryani", "divisi": "HR-Division", "telepon": "0812-333-444"},
-    "123456": {"pass": "honda123", "nama": "Public", "divisi": "Finance", "telepon": "0856-777-888"},
+    "123456": {"pass": "testing123", "nama": "Public", "divisi": "Finance", "telepon": "0856-777-888"},
     "11223": {"pass": "honda123", "nama": "Andi Pratama", "divisi": "IT", "telepon": "0811-222-333"}
 }
 
