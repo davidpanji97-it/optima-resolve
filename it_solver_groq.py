@@ -176,7 +176,7 @@ if st.session_state.page == "LOGIN":
                     st.error("❌ Login Gagal. NIP atau Password tidak terdaftar di sistem HRD.")
 
 # ==========================================
-# 5. ROUTER: FORMULIR TIKET
+# 5. ROUTER: FORMULIR TIKET (DIPERBARUI)
 # ==========================================
 elif st.session_state.page == "FORM_TIKET":
     st.markdown("## 📝 Buat Tiket Kendala Baru")
@@ -194,13 +194,29 @@ elif st.session_state.page == "FORM_TIKET":
         st.markdown("#### Deskripsi Masalah")
         kendala = st.text_area("Ceritakan kendala IT yang Anda alami secara detail...", height=100)
         
+        # FITUR BARU: Tombol upload dipindah ke sini agar menyatu dengan keluhan
+        st.markdown("#### 📸 Lampirkan Foto Error / Bukti Kendala (Opsional)")
+        foto_awal = st.file_uploader("Pilih foto agar langsung terbaca admin bersama keluhan", type=['png', 'jpg', 'jpeg'])
+        
         submitted = st.form_submit_button("🚀 Submit & Hubungkan ke Optima AI", type="primary")
         
         if submitted:
             if kendala == "":
                 st.warning("⚠️ Deskripsi Kendala wajib diisi!")
             else:
+                # Memproses foto jika di-upload
+                nama_file_foto = "Tidak ada lampiran"
+                if foto_awal:
+                    os.makedirs("attachments", exist_ok=True)
+                    nama_file_foto = f"{st.session_state.ticket_id}_{foto_awal.name}"
+                    filepath = f"attachments/{nama_file_foto}"
+                    with open(filepath, "wb") as f: 
+                        f.write(foto_awal.getbuffer())
+                
+                # Simpan keluhan dan lampiran ke session state
                 st.session_state.user_data['kendala_awal'] = kendala
+                st.session_state.user_data['lampiran_awal'] = nama_file_foto
+                
                 st.session_state.first_prompt_pending = True
                 st.session_state.page = "CHAT_CONSOLE"
                 st.rerun()
@@ -237,17 +253,25 @@ elif st.session_state.page == "CHAT_CONSOLE":
 
     with col_chat:
         with st.container(height=550, border=True):
-            with st.expander("📸 Lampirkan Foto Error / Bukti Kendala (Opsional)"):
-                st.caption("Screenshot kendala Anda akan dikirim bersama chat berikutnya.")
-                foto_kendala = st.file_uploader("Pilih Foto", type=['png', 'jpg', 'jpeg'], label_visibility="collapsed", key=f"upload_{st.session_state.uploader_key}")
+            # Expander ini disisakan hanya untuk foto TAMBAHAN jika diminta AI
+            with st.expander("📸 Upload Foto Tambahan (Hanya jika diminta AI)"):
+                st.caption("Gunakan ini jika AI meminta screenshot tambahan saat obrolan berlangsung.")
+                foto_kendala = st.file_uploader("Pilih Foto Tambahan", type=['png', 'jpg', 'jpeg'], label_visibility="collapsed", key=f"upload_{st.session_state.uploader_key}")
                 if foto_kendala:
                     st.image(foto_kendala, width=200)
-                    st.info("💡 Foto siap dikirim.")
+                    st.info("💡 Foto tambahan siap dikirim.")
             st.markdown("---")
             
             if st.session_state.first_prompt_pending:
                 keluhan_awal = st.session_state.user_data['kendala_awal']
-                st.session_state.messages.append({"role": "user", "content": keluhan_awal, "image_path": None})
+                lampiran_awal = st.session_state.user_data.get('lampiran_awal', 'Tidak ada lampiran')
+                
+                # Menampilkan foto di layar chat (jika ada)
+                img_path = None
+                if lampiran_awal != "Tidak ada lampiran":
+                    img_path = f"attachments/{lampiran_awal}"
+                    
+                st.session_state.messages.append({"role": "user", "content": keluhan_awal, "image_path": img_path})
                 
                 if any(k in keluhan_awal.lower() for k in ['mati', 'rusak', 'terbakar', 'server', 'jaringan']):
                     st.session_state.ticket_priority = "High 🔴"
@@ -272,7 +296,7 @@ elif st.session_state.page == "CHAT_CONSOLE":
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 st.session_state.first_prompt_pending = False
                 
-                # 🚀 KIRIM KE FIREBASE CLOUD
+                # 🚀 KIRIM KE FIREBASE CLOUD (KELUHAN + FOTO AWAL JADI SATU)
                 ud = st.session_state.user_data
                 wkt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 db.collection('rekap_tiket').add({
@@ -284,7 +308,7 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     'Telepon': ud['telepon'],
                     'Kendala': keluhan_awal,
                     'Solusi': full_response,
-                    'Lampiran': "Tidak ada lampiran"
+                    'Lampiran': lampiran_awal # <-- FOTO SEKARANG MASUK KE BARIS INI!
                 })
                     
                 st.session_state.ticket_status = "Selesai (AI) ✅"
@@ -306,7 +330,7 @@ elif st.session_state.page == "CHAT_CONSOLE":
                 filepath = f"attachments/{nama_file_foto}"
                 with open(filepath, "wb") as f: f.write(foto_kendala.getbuffer())
                 st.session_state.uploader_key += 1
-                teks_untuk_db = f"[📸 FOTO TERLAMPIR] {prompt_input}"
+                teks_untuk_db = f"[📸 FOTO TAMBAHAN TERLAMPIR] {prompt_input}"
             else:
                 teks_untuk_db = prompt_input
                 
