@@ -142,6 +142,7 @@ if st.session_state.page == "LOGIN":
             
             submitted = st.form_submit_button("Masuk / Sign In", use_container_width=True, type="primary")
             st.markdown("<p style='text-align: center; color: #8b949e; margin-top: 15px; font-size: 13px;'>💡 Silahkan Login: NIP 123456 | Password testing123</p>", unsafe_allow_html=True)
+            
             if submitted:
                 if nip_input == "Admin" and pass_input == "william123":
                     st.session_state.page = "ADMIN"
@@ -355,6 +356,43 @@ elif st.session_state.page == "ADMIN":
 
             st.markdown("#### 📋 Database Log Enterprise")
             st.dataframe(df.drop(columns=['Tanggal'], errors='ignore'), use_container_width=True, hide_index=True, height=300)
+            st.markdown("---")
+            st.markdown("#### 🔍 Inspektur Detail & Bukti Foto Tiket")
+            
+            list_tiket = df['ID Tiket'].dropna().unique()
+            selected_ticket = st.selectbox("Pilih ID Tiket untuk verifikasi bukti foto laporan:", list_tiket)
+            
+            if selected_ticket:
+                # 🚀 LOGIKA BARU: Cari tiket dan ambil SEMUA baris miliknya
+                tiket_rows = df[df['ID Tiket'] == selected_ticket]
+                tiket_row_awal = tiket_rows.iloc[0] # Baris pertama untuk info pelapor
+                
+                # Memilah baris mana yang punya foto
+                foto_rows = tiket_rows[tiket_rows['Lampiran'] != "Tidak ada lampiran"]
+                
+                if not foto_rows.empty:
+                    nama_foto = foto_rows.iloc[-1]['Lampiran'] # Mengambil lampiran terakhir yang dikirim
+                else:
+                    nama_foto = "Tidak ada lampiran"
+
+                col_det1, col_det2 = st.columns([1.8, 1.2])
+                
+                with col_det1:
+                    st.write(f"👤 **Pelapor:** {tiket_row_awal['Nama']} ({tiket_row_awal['Divisi']}) — Ext: {tiket_row_awal['Telepon']}")
+                    st.write(f"📅 **Waktu Pengajuan:** {tiket_row_awal['Waktu']}")
+                    st.info(f"📌 **Deskripsi Kendala:**\n\n{tiket_row_awal['Kendala']}")
+                    st.success(f"🤖 **Solusi AI Terkirim:**\n\n{tiket_row_awal['Solusi']}")
+                    
+                with col_det2:
+                    st.write("🖼️ **Bukti Screenshot Lampiran:**")
+                    path_foto = f"attachments/{nama_foto}"
+                    
+                    if nama_foto != "Tidak ada lampiran" and os.path.exists(path_foto):
+                        st.image(path_foto, caption=f"Bukti Lampiran Tiket {selected_ticket}", use_container_width=True)
+                    else:
+                        st.warning("⚠️ Tiket ini diselesaikan tanpa ada lampiran foto.")
+            
+            st.markdown("---")
             
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
