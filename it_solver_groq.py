@@ -1,6 +1,7 @@
 import os
 import io
 import time
+import json
 import string
 import random
 from datetime import datetime
@@ -27,13 +28,19 @@ from langchain_text_splitters import CharacterTextSplitter
 load_dotenv()
 api_key = os.getenv("GROQ_API_KEY")
 
-# Inisialisasi Firebase Firestore (Mencegah error saat Streamlit me-refresh halaman)
+# Inisialisasi Firebase Firestore (Mendukung Lokal & Cloud Secrets)
 if not firebase_admin._apps:
     try:
-        cred = credentials.Certificate("credentials-firebase.json")
+        # Cek apakah berjalan di Streamlit Cloud (membaca dari brankas rahasia)
+        if "firebase_json" in st.secrets:
+            firebase_secrets = json.loads(st.secrets["firebase_json"])
+            cred = credentials.Certificate(firebase_secrets)
+        else:
+            # Berjalan di lokal VS Code (membaca file json fisik)
+            cred = credentials.Certificate("credentials-firebase.json")
         firebase_admin.initialize_app(cred)
     except Exception as e:
-        st.error(f"Gagal memuat kunci Firebase. Pastikan file 'credentials-firebase.json' ada di folder proyek. Error: {e}")
+        st.error(f"Gagal memuat kunci Firebase. Error: {e}")
 
 db = firestore.client()
 
@@ -64,18 +71,14 @@ st.markdown("""
         font-family: 'JetBrains Mono', monospace;
     }
     
-    /* Menghilangkan Jejak Streamlit */
     [data-testid="stHeader"], .stAppHeader, [data-testid="stStatusWidget"], footer {
         visibility: hidden !important; display: none !important;
     }
     
-    /* Ruang aman di bawah layar */
     .block-container {padding-top: 1rem !important; padding-bottom: 120px !important;}
     
-    /* Menghilangkan teks "Press Enter to apply" */
     div[data-testid="InputInstructions"] { visibility: hidden !important; display: none !important; }
     
-    /* MENGHILANGKAN KOTAK NYASAR: Desain langsung ditempel ke kontainer bawaan Streamlit */
     div[data-testid="stForm"], div[data-testid="stVerticalBlockBorderWrapper"] {
         background: rgba(23, 28, 36, 0.8) !important;
         border: 1px solid #30363d !important;
@@ -90,7 +93,6 @@ st.markdown("""
         border-radius: 10px; border: 1px solid #30363d;
     }
     
-    /* Posisi kotak input melayang di bawah */
     div[data-testid="stChatInput"] { bottom: 45px !important; z-index: 1000 !important; }
     
     .custom-footer {
@@ -374,9 +376,7 @@ elif st.session_state.page == "ADMIN":
                 
             if len(data_list) > 0:
                 df = pd.DataFrame(data_list)
-                # Menyusun kolom sesuai format laporan
                 df = df[['Waktu', 'ID Tiket', 'NIP', 'Nama', 'Divisi', 'Telepon', 'Kendala', 'Solusi', 'Lampiran']]
-                # Mengurutkan berdasarkan waktu dari yang terlama ke terbaru
                 df = df.sort_values(by='Waktu', ascending=True)
             else:
                 df = pd.DataFrame(columns=['Waktu', 'ID Tiket', 'NIP', 'Nama', 'Divisi', 'Telepon', 'Kendala', 'Solusi', 'Lampiran'])
