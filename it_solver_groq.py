@@ -1,6 +1,5 @@
 import os
 import io
-import csv
 import time
 import string
 import random
@@ -11,6 +10,10 @@ import pandas as pd
 import plotly.express as px
 from dotenv import load_dotenv
 
+# Konfigurasi Firebase NoSQL
+import firebase_admin
+from firebase_admin import credentials, firestore
+
 # Konfigurasi AI & RAG
 from groq import Groq
 from langchain_community.document_loaders import TextLoader
@@ -19,10 +22,20 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import CharacterTextSplitter
 
 # ==========================================
-# 1. INIT & CONFIGURATION
+# 1. INIT & CONFIGURATION (FIREBASE & AI)
 # ==========================================
 load_dotenv()
 api_key = os.getenv("GROQ_API_KEY")
+
+# Inisialisasi Firebase Firestore (Mencegah error saat Streamlit me-refresh halaman)
+if not firebase_admin._apps:
+    try:
+        cred = credentials.Certificate("credentials-firebase.json")
+        firebase_admin.initialize_app(cred)
+    except Exception as e:
+        st.error(f"Gagal memuat kunci Firebase. Pastikan file 'credentials-firebase.json' ada di folder proyek. Error: {e}")
+
+db = firestore.client()
 
 @st.cache_resource
 def prepare_knowledge_base():
@@ -91,20 +104,25 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. SESSION STATE MANAGEMENT
+# 3. NOSQL FIREBASE STATE MANAGEMENT
 # ==========================================
 def generate_sequential_id():
-    file_path = 'rekap_tiket_it.csv'
+    """Membaca ID terakhir langsung dari Firebase Firestore"""
     prefix = "OPT-"
-    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-        try:
-            df_temp = pd.read_csv(file_path, names=['Waktu', 'ID Tiket', 'NIP', 'Nama', 'Divisi', 'Telepon', 'Kendala', 'Solusi', 'Lampiran'], engine='python')
-            last_id_string = df_temp['ID Tiket'].dropna().iloc[-1]
+    try:
+        tickets_ref = db.collection('rekap_tiket')
+        query = tickets_ref.order_by('Waktu', direction=firestore.Query.DESCENDING).limit(1).stream()
+        
+        last_id_string = None
+        for doc in query:
+            last_id_string = doc.to_dict().get('ID Tiket')
+            
+        if last_id_string:
             last_number = int(last_id_string.replace(prefix, ""))
             next_number = last_number + 1
-        except:
+        else:
             next_number = 1
-    else:
+    except Exception as e:
         next_number = 1
     return f"{prefix}{next_number:05d}"
 
@@ -196,7 +214,6 @@ elif st.session_state.page == "CHAT_CONSOLE":
     
     col_chat, col_info = st.columns([2.5, 1])
 
-    # PANEL KANAN (INFO STATUS)
     with col_info:
         with st.container(border=True):
             st.markdown("### ⚙️ Optima Engine Status")
@@ -216,9 +233,7 @@ elif st.session_state.page == "CHAT_CONSOLE":
             if st.button("Tutup Tiket & Keluar", type="secondary", use_container_width=True):
                 logout()
 
-    # PANEL KIRI (AREA CHAT AUTOFIT)
     with col_chat:
-        # KUNCI AUTOFIT: height=550 akan membuat kotak chat memiliki scroll sendiri di dalam!
         with st.container(height=550, border=True):
             with st.expander("📸 Lampirkan Foto Error / Bukti Kendala (Opsional)"):
                 st.caption("Screenshot kendala Anda akan dikirim bersama chat berikutnya.")
@@ -255,23 +270,30 @@ elif st.session_state.page == "CHAT_CONSOLE":
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 st.session_state.first_prompt_pending = False
                 
-                with open('rekap_tiket_it.csv', mode='a', newline='', encoding='utf-8') as file:
-                    writer = csv.writer(file)
-                    wkt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    ud = st.session_state.user_data
-                    writer.writerow([wkt, st.session_state.ticket_id, ud['nip'], ud['nama'], ud['divisi'], ud['telepon'], keluhan_awal, full_response, "Tidak ada lampiran"])
+                # 🚀 KIRIM KE FIREBASE CLOUD
+                ud = st.session_state.user_data
+                wkt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                db.collection('rekap_tiket').add({
+                    'Waktu': wkt,
+                    'ID Tiket': st.session_state.ticket_id,
+                    'NIP': ud['nip'],
+                    'Nama': ud['nama'],
+                    'Divisi': ud['divisi'],
+                    'Telepon': ud['telepon'],
+                    'Kendala': keluhan_awal,
+                    'Solusi': full_response,
+                    'Lampiran': "Tidak ada lampiran"
+                })
                     
                 st.session_state.ticket_status = "Selesai (AI) ✅"
                 render_info()
                 st.rerun()
 
-            # Menampilkan isi chat
             for message in st.session_state.messages:
                 with st.chat_message(message["role"]):
-                    if message.get("image_path"): st.image(message["image_path"], width=300) 
+                    if message.get("image_path"): st.image(message["image_path"], width=300)
                     st.markdown(message["content"])
 
-        # Kotak input di luar area Autofit (tetap melayang dengan aman)
         if prompt_input := st.chat_input("Ketik pesan balasan di sini..."):
             filepath = None
             nama_file_foto = "Tidak ada lampiran"
@@ -282,9 +304,9 @@ elif st.session_state.page == "CHAT_CONSOLE":
                 filepath = f"attachments/{nama_file_foto}"
                 with open(filepath, "wb") as f: f.write(foto_kendala.getbuffer())
                 st.session_state.uploader_key += 1
-                teks_untuk_csv = f"[📸 FOTO TERLAMPIR] {prompt_input}"
+                teks_untuk_db = f"[📸 FOTO TERLAMPIR] {prompt_input}"
             else:
-                teks_untuk_csv = prompt_input
+                teks_untuk_db = prompt_input
                 
             st.session_state.ticket_status = "Scanning System ⚙️"
             render_info()
@@ -311,11 +333,20 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     st.markdown(full_response)
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-                    with open('rekap_tiket_it.csv', mode='a', newline='', encoding='utf-8') as file:
-                        writer = csv.writer(file)
-                        wkt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        ud = st.session_state.user_data
-                        writer.writerow([wkt, st.session_state.ticket_id, ud['nip'], ud['nama'], ud['divisi'], ud['telepon'], teks_untuk_csv, full_response, nama_file_foto])
+                    # 🚀 KIRIM CHAT LANJUTAN KE FIREBASE CLOUD
+                    ud = st.session_state.user_data
+                    wkt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    db.collection('rekap_tiket').add({
+                        'Waktu': wkt,
+                        'ID Tiket': st.session_state.ticket_id,
+                        'NIP': ud['nip'],
+                        'Nama': ud['nama'],
+                        'Divisi': ud['divisi'],
+                        'Telepon': ud['telepon'],
+                        'Kendala': teks_untuk_db,
+                        'Solusi': full_response,
+                        'Lampiran': nama_file_foto
+                    })
 
                     st.session_state.ticket_status = "Selesai (AI) ✅"
                     render_info()
@@ -333,90 +364,105 @@ elif st.session_state.page == "ADMIN":
     
     with st.container(border=True):
         try:
-            df = pd.read_csv('rekap_tiket_it.csv', names=['Waktu', 'ID Tiket', 'NIP', 'Nama', 'Divisi', 'Telepon', 'Kendala', 'Solusi', 'Lampiran'])
+            # 🚀 AMBIL DATA DARI FIREBASE CLOUD
+            tickets_ref = db.collection('rekap_tiket')
+            docs = tickets_ref.stream()
             
-            col_chart1, col_chart2 = st.columns(2)
-            with col_chart1:
-                st.markdown("**📈 Tren Volume Tiket**")
-                df['Tanggal'] = pd.to_datetime(df['Waktu'], errors='coerce').dt.date
-                tiket_per_hari = df.groupby('Tanggal').size().reset_index(name='Jumlah')
-                if not tiket_per_hari.empty:
-                    fig_line = px.line(tiket_per_hari, x='Tanggal', y='Jumlah', markers=True, template='plotly_dark')
-                    fig_line.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e0e0e0")
-                    st.plotly_chart(fig_line, use_container_width=True)
+            data_list = []
+            for doc in docs:
+                data_list.append(doc.to_dict())
                 
-            with col_chart2:
-                st.markdown("**📊 Masalah per Divisi**")
-                if not df.empty:
+            if len(data_list) > 0:
+                df = pd.DataFrame(data_list)
+                # Menyusun kolom sesuai format laporan
+                df = df[['Waktu', 'ID Tiket', 'NIP', 'Nama', 'Divisi', 'Telepon', 'Kendala', 'Solusi', 'Lampiran']]
+                # Mengurutkan berdasarkan waktu dari yang terlama ke terbaru
+                df = df.sort_values(by='Waktu', ascending=True)
+            else:
+                df = pd.DataFrame(columns=['Waktu', 'ID Tiket', 'NIP', 'Nama', 'Divisi', 'Telepon', 'Kendala', 'Solusi', 'Lampiran'])
+
+            if not df.empty:
+                col_chart1, col_chart2 = st.columns(2)
+                with col_chart1:
+                    st.markdown("**📈 Tren Volume Tiket**")
+                    df['Tanggal'] = pd.to_datetime(df['Waktu'], errors='coerce').dt.date
+                    tiket_per_hari = df.groupby('Tanggal').size().reset_index(name='Jumlah')
+                    if not tiket_per_hari.empty:
+                        fig_line = px.line(tiket_per_hari, x='Tanggal', y='Jumlah', markers=True, template='plotly_dark')
+                        fig_line.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e0e0e0")
+                        st.plotly_chart(fig_line, use_container_width=True)
+                    
+                with col_chart2:
+                    st.markdown("**📊 Masalah per Divisi**")
                     div_count = df['Divisi'].value_counts().reset_index()
                     div_count.columns = ['Divisi', 'Jumlah']
                     fig_pie = px.pie(div_count, values='Jumlah', names='Divisi', hole=0.4, template='plotly_dark')
                     fig_pie.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", font_color="#e0e0e0")
                     st.plotly_chart(fig_pie, use_container_width=True)
 
-            st.markdown("#### 📋 Database Log Enterprise")
-            st.dataframe(df.drop(columns=['Tanggal'], errors='ignore'), use_container_width=True, hide_index=True, height=300)
-            st.markdown("---")
-            st.markdown("#### 🔍 Inspektur Detail & Bukti Foto Tiket")
-            
-            list_tiket = df['ID Tiket'].dropna().unique()
-            selected_ticket = st.selectbox("Pilih ID Tiket untuk verifikasi bukti foto laporan:", list_tiket)
-            
-            if selected_ticket:
-                # 🚀 LOGIKA BARU: Cari tiket dan ambil SEMUA baris miliknya
-                tiket_rows = df[df['ID Tiket'] == selected_ticket]
-                tiket_row_awal = tiket_rows.iloc[0] # Baris pertama untuk info pelapor
+                st.markdown("#### 📋 Database Log Enterprise (Cloud Firebase)")
+                st.dataframe(df.drop(columns=['Tanggal'], errors='ignore'), use_container_width=True, hide_index=True, height=300)
                 
-                # Memilah baris mana yang punya foto
-                foto_rows = tiket_rows[tiket_rows['Lampiran'] != "Tidak ada lampiran"]
+                st.markdown("---")
+                st.markdown("#### 🔍 Inspektur Detail & Bukti Foto Tiket")
                 
-                if not foto_rows.empty:
-                    nama_foto = foto_rows.iloc[-1]['Lampiran'] # Mengambil lampiran terakhir yang dikirim
-                else:
-                    nama_foto = "Tidak ada lampiran"
-
-                col_det1, col_det2 = st.columns([1.8, 1.2])
+                list_tiket = df['ID Tiket'].dropna().unique()
+                selected_ticket = st.selectbox("Pilih ID Tiket untuk verifikasi bukti foto laporan:", list_tiket)
                 
-                with col_det1:
-                    st.write(f"👤 **Pelapor:** {tiket_row_awal['Nama']} ({tiket_row_awal['Divisi']}) — Ext: {tiket_row_awal['Telepon']}")
-                    st.write(f"📅 **Waktu Pengajuan:** {tiket_row_awal['Waktu']}")
-                    st.info(f"📌 **Deskripsi Kendala:**\n\n{tiket_row_awal['Kendala']}")
-                    st.success(f"🤖 **Solusi AI Terkirim:**\n\n{tiket_row_awal['Solusi']}")
+                if selected_ticket:
+                    tiket_rows = df[df['ID Tiket'] == selected_ticket]
+                    tiket_row_awal = tiket_rows.iloc[0]
                     
-                with col_det2:
-                    st.write("🖼️ **Bukti Screenshot Lampiran:**")
-                    path_foto = f"attachments/{nama_foto}"
-                    
-                    if nama_foto != "Tidak ada lampiran" and os.path.exists(path_foto):
-                        st.image(path_foto, caption=f"Bukti Lampiran Tiket {selected_ticket}", use_container_width=True)
+                    foto_rows = tiket_rows[tiket_rows['Lampiran'] != "Tidak ada lampiran"]
+                    if not foto_rows.empty:
+                        nama_foto = foto_rows.iloc[-1]['Lampiran']
                     else:
-                        st.warning("⚠️ Tiket ini diselesaikan tanpa ada lampiran foto.")
-            
-            st.markdown("---")
-            
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df.drop(columns=['Tanggal'], errors='ignore').to_excel(writer, index=False, sheet_name='Data_Optima')
-                workbook = writer.book
-                worksheet = writer.sheets['Data_Optima']
-                wrap_format = workbook.add_format({'text_wrap': True, 'valign': 'vcenter'})
-                header_format = workbook.add_format({'bold': True, 'bg_color': '#30363d', 'font_color': 'white', 'border': 1})
+                        nama_foto = "Tidak ada lampiran"
+                        
+                    col_det1, col_det2 = st.columns([1.8, 1.2])
+                    
+                    with col_det1:
+                        st.write(f"👤 **Pelapor:** {tiket_row_awal['Nama']} ({tiket_row_awal['Divisi']}) — Ext: {tiket_row_awal['Telepon']}")
+                        st.write(f"📅 **Waktu Pengajuan:** {tiket_row_awal['Waktu']}")
+                        st.info(f"📌 **Deskripsi Kendala:**\n\n{tiket_row_awal['Kendala']}")
+                        st.success(f"🤖 **Solusi AI Terkirim:**\n\n{tiket_row_awal['Solusi']}")
+                        
+                    with col_det2:
+                        st.write("🖼️ **Bukti Screenshot Lampiran:**")
+                        path_foto = f"attachments/{nama_foto}"
+                        
+                        if nama_foto != "Tidak ada lampiran" and os.path.exists(path_foto):
+                            st.image(path_foto, caption=f"Bukti Lampiran Tiket {selected_ticket}", use_container_width=True)
+                        else:
+                            st.warning("⚠️ Tiket ini diselesaikan tanpa ada lampiran foto.")
                 
-                worksheet.set_column('A:B', 15, wrap_format) 
-                worksheet.set_column('C:F', 15, wrap_format) 
-                worksheet.set_column('G:H', 40, wrap_format) 
-                worksheet.set_column('I:I', 20, wrap_format) 
-                for col_num, value in enumerate(df.columns):
-                    if value != 'Tanggal': worksheet.write(0, col_num, value, header_format)
+                st.markdown("---")
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    df.drop(columns=['Tanggal'], errors='ignore').to_excel(writer, index=False, sheet_name='Data_Optima')
+                    workbook = writer.book
+                    worksheet = writer.sheets['Data_Optima']
+                    wrap_format = workbook.add_format({'text_wrap': True, 'valign': 'vcenter'})
+                    header_format = workbook.add_format({'bold': True, 'bg_color': '#30363d', 'font_color': 'white', 'border': 1})
+                    
+                    worksheet.set_column('A:B', 15, wrap_format)
+                    worksheet.set_column('C:F', 15, wrap_format)
+                    worksheet.set_column('G:H', 40, wrap_format)
+                    worksheet.set_column('I:I', 20, wrap_format)
+                    for col_num, value in enumerate(df.drop(columns=['Tanggal'], errors='ignore').columns):
+                        worksheet.write(0, col_num, value, header_format)
 
-            st.download_button(
-                label="📥 Download Laporan Optima Full (.xlsx)",
-                data=output.getvalue(),
-                file_name="Laporan_Optima_Resolve.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        except FileNotFoundError:
-            st.warning("Database masih kosong.")
+                st.download_button(
+                    label="📥 Download Laporan Optima Full (.xlsx)",
+                    data=output.getvalue(),
+                    file_name="Laporan_Optima_Resolve.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            else:
+                st.info("📊 Database Firebase Anda saat ini masih kosong. Silakan masuk sebagai user dan buat tiket pertama Anda untuk mengujinya!")
+                
+        except Exception as e:
+            st.error(f"Gagal mengambil data dari Firebase. Pastikan koneksi internet stabil. Detail: {e}")
 
 # ==========================================
 # 8. FOOTER
