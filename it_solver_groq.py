@@ -141,9 +141,9 @@ if st.session_state.page == "LOGIN":
             pass_input = st.text_input("Password", type="password", placeholder="•••••••• (Contoh: honda123)")
             
             submitted = st.form_submit_button("Masuk / Sign In", use_container_width=True, type="primary")
-            
+            st.markdown("<p style='text-align: center; color: #8b949e; margin-top: 15px; font-size: 13px;'>💡 Silahkan Login: NIP 123456 | Password testing123</p>", unsafe_allow_html=True)
             if submitted:
-                if nip_input == "admin" and pass_input == "admin123":
+                if nip_input == "Admin" and pass_input == "william123":
                     st.session_state.page = "ADMIN"
                     st.rerun()
                 elif nip_input in DATABASE_KARYAWAN and DATABASE_KARYAWAN[nip_input]["pass"] == pass_input:
