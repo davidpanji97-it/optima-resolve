@@ -340,8 +340,8 @@ elif st.session_state.page == "CHAT_CONSOLE":
                 except Exception as e:
                     st.error("Koneksi Error. Silakan coba lagi.")
 elif st.session_state.page == "ADMIN":
-    st.markdown("## 🛠️ OPTIMA CENTRAL ANALYTICS")
-    if st.button("Keluar dari Dashboard (Logout)", type="primary"):
+    st.markdown("## 🛠️ OPTIMA ANALYTICS")
+    if st.button("Keluar dari Dashboard", type="primary"):
         logout()
     
     with st.container(border=True):
