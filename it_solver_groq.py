@@ -382,6 +382,9 @@ elif st.session_state.page == "CHAT_CONSOLE":
 # ==========================================
 # 7. ROUTER: DASHBOARD ADMIN
 # ==========================================
+# ==========================================
+# 7. ROUTER: DASHBOARD ADMIN
+# ==========================================
 elif st.session_state.page == "ADMIN":
     st.markdown("## 🛠️ OPTIMA CENTRAL ANALYTICS")
     if st.button("Keluar dari Dashboard (Logout)", type="primary"):
@@ -425,9 +428,23 @@ elif st.session_state.page == "ADMIN":
 
                 st.markdown("#### 📋 Database Log Enterprise (Cloud Firebase)")
                 
-                # MENGGUNAKAN ST.TABLE AGAR TEKS AI TERBACA FULL DAN TIDAK TERPOTONG
-                df_tampil = df.drop(columns=['Tanggal'], errors='ignore').reset_index(drop=True)
-                st.table(df_tampil)
+                # 🔥 OBAT ABSOLUT: Menggunakan HTML murni agar teks memanjang ke bawah & tidak terpotong
+                df_bersih = df.drop(columns=['Tanggal'], errors='ignore')
+                html_table = df_bersih.to_html(index=False, escape=False)
+
+                st.markdown(f"""
+                <div style="overflow-x: auto;">
+                    <style>
+                        .custom-table {{ width: 100%; border-collapse: collapse; color: #e0e0e0; font-size: 13px; }}
+                        .custom-table th {{ background-color: #21262d; padding: 12px; text-align: left; border: 1px solid #30363d; color: #58a6ff; }}
+                        .custom-table td {{ padding: 12px; border: 1px solid #30363d; white-space: normal !important; word-break: break-word !important; vertical-align: top; }}
+                        .custom-table tr:nth-child(even) {{ background-color: rgba(255, 255, 255, 0.02); }}
+                    </style>
+                    <div class="custom-table">
+                        {html_table}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
                 st.markdown("---")
                 st.markdown("#### 🔍 Inspektur Detail & Bukti Foto Tiket")
