@@ -5,45 +5,30 @@ import json
 import string
 import random
 from datetime import datetime, timedelta
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from dotenv import load_dotenv
-
-# Konfigurasi Firebase NoSQL
 import firebase_admin
 from firebase_admin import credentials, firestore
-
-# Konfigurasi AI & RAG
 from groq import Groq
 from langchain_community.document_loaders import TextLoader
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import CharacterTextSplitter
-
-# ==========================================
-# 1. INIT & CONFIGURATION (FIREBASE & AI)
-# ==========================================
 load_dotenv()
 api_key = os.getenv("GROQ_API_KEY")
-
-# Inisialisasi Firebase Firestore (Mendukung Lokal & Cloud Secrets)
 if not firebase_admin._apps:
     try:
-        # Cek apakah berjalan di Streamlit Cloud (membaca dari brankas rahasia)
         if "firebase_json" in st.secrets:
             firebase_secrets = json.loads(st.secrets["firebase_json"])
             cred = credentials.Certificate(firebase_secrets)
         else:
-            # Berjalan di lokal VS Code (membaca file json fisik)
             cred = credentials.Certificate("credentials-firebase.json")
         firebase_admin.initialize_app(cred)
     except Exception as e:
         st.error(f"Gagal memuat kunci Firebase. Error: {e}")
-
 db = firestore.client()
-
 @st.cache_resource
 def prepare_knowledge_base():
     """Mempersiapkan RAG (Retrieval-Augmented Generation) Database"""
@@ -55,10 +40,6 @@ def prepare_knowledge_base():
     return FAISS.from_documents(docs, embeddings)
 
 vector_db = prepare_knowledge_base()
-
-# ==========================================
-# 2. UI/UX & STYLING (WHITE-LABEL)
-# ==========================================
 st.set_page_config(page_title="Optima Resolve", page_icon="🛡️", layout="wide")
 
 st.markdown("""
@@ -70,7 +51,7 @@ st.markdown("""
         color: #e0e0e0;
         font-family: 'JetBrains Mono', monospace;
     }
-    
+ 
     [data-testid="stHeader"], .stAppHeader, [data-testid="stStatusWidget"], footer {
         visibility: hidden !important; display: none !important;
     }
@@ -104,10 +85,6 @@ st.markdown("""
     .watermark { font-size: 10px; color: #58a6ff; opacity: 0.6; margin-top: -10px; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
-
-# ==========================================
-# 3. NOSQL FIREBASE STATE MANAGEMENT
-# ==========================================
 def generate_sequential_id():
     """Membaca ID terakhir langsung dari Firebase Firestore"""
     prefix = "OPT-"
@@ -146,10 +123,6 @@ DATABASE_KARYAWAN = {
     "123456": {"pass": "testing123", "nama": "Public", "divisi": "Finance", "telepon": "0856-777-888"},
     "11223": {"pass": "honda123", "nama": "Andi Pratama", "divisi": "IT", "telepon": "0811-222-333"}
 }
-
-# ==========================================
-# 4. ROUTER: HALAMAN LOGIN
-# ==========================================
 if st.session_state.page == "LOGIN":
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
@@ -157,8 +130,8 @@ if st.session_state.page == "LOGIN":
             st.markdown("<h2 style='text-align: center; color: white;'>🛡️ Optima Resolve</h2>", unsafe_allow_html=True)
             st.markdown("<p style='text-align: center; color: #8b949e; margin-bottom: 30px;'>Enterprise SSO Login Gateway</p>", unsafe_allow_html=True)
             
-            nip_input = st.text_input("NIP / Employee ID", placeholder="Masukkan NIP (Contoh: 12345)")
-            pass_input = st.text_input("Password", type="password", placeholder="•••••••• (Contoh: honda123)")
+            nip_input = st.text_input("NIP / Employee ID")
+            pass_input = st.text_input("Password", type="password")
             
             submitted = st.form_submit_button("Masuk / Sign In", use_container_width=True, type="primary")
             st.markdown("<p style='text-align: center; color: #8b949e; margin-top: 15px; font-size: 13px;'>💡 Silahkan Login: NIP 123456 | Password testing123</p>", unsafe_allow_html=True)
@@ -174,10 +147,6 @@ if st.session_state.page == "LOGIN":
                     st.rerun()
                 else:
                     st.error("❌ Login Gagal. NIP atau Password tidak terdaftar di sistem HRD.")
-
-# ==========================================
-# 5. ROUTER: FORMULIR TIKET (Upload Foto di Sini)
-# ==========================================
 elif st.session_state.page == "FORM_TIKET":
     st.markdown("## 📝 Buat Tiket Kendala Baru")
     st.caption(f"Logged in as: NIP {st.session_state.user_data.get('nip', '')}")
@@ -194,7 +163,7 @@ elif st.session_state.page == "FORM_TIKET":
         st.markdown("#### Deskripsi Masalah")
         kendala = st.text_area("Ceritakan kendala IT yang Anda alami secara detail...", height=100)
         
-        st.markdown("#### 📸 Lampirkan Foto Error / Bukti Kendala (Opsional)")
+        st.markdown("#### 📸 Lampirkan Foto Error / Bukti Kendala")
         foto_awal = st.file_uploader("Pilih foto agar langsung terbaca admin bersama keluhan", type=['png', 'jpg', 'jpeg'])
         
         submitted = st.form_submit_button("🚀 Submit & Hubungkan ke Optima AI", type="primary")
@@ -221,10 +190,6 @@ elif st.session_state.page == "FORM_TIKET":
                 st.rerun()
     
     if st.button("⬅️ Kembali ke Login"): logout()
-
-# ==========================================
-# 6. ROUTER: AI CHAT CONSOLE
-# ==========================================
 elif st.session_state.page == "CHAT_CONSOLE":
     st.markdown("## 🛡️ RAG-Powered Intelligent IT Service Desk")
     st.markdown(f'<p style="color: #8b949e; margin-top: -10px;">Hi, {st.session_state.user_data["nama"]} ({st.session_state.user_data["divisi"]}) | Optima Console v3.0</p>', unsafe_allow_html=True)
@@ -254,7 +219,7 @@ elif st.session_state.page == "CHAT_CONSOLE":
 
     with col_chat:
         with st.container(height=550, border=True):
-            with st.expander("📸 Upload Foto Tambahan (Hanya jika diminta AI)"):
+            with st.expander("📸 Upload Foto Tambahan"):
                 st.caption("Gunakan ini jika AI meminta screenshot tambahan saat obrolan berlangsung.")
                 foto_kendala = st.file_uploader("Pilih Foto Tambahan", type=['png', 'jpg', 'jpeg'], label_visibility="collapsed", key=f"upload_{st.session_state.uploader_key}")
                 if foto_kendala:
@@ -294,8 +259,6 @@ elif st.session_state.page == "CHAT_CONSOLE":
                 
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 st.session_state.first_prompt_pending = False
-                
-                # 🚀 KIRIM KE FIREBASE CLOUD DENGAN WAKTU WIB (UTC+7)
                 ud = st.session_state.user_data
                 wkt = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
                 db.collection('rekap_tiket').add({
@@ -357,8 +320,6 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     
                     st.markdown(full_response)
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-                    # 🚀 KIRIM CHAT LANJUTAN KE FIREBASE CLOUD DENGAN WAKTU WIB (UTC+7)
                     ud = st.session_state.user_data
                     wkt = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
                     db.collection('rekap_tiket').add({
@@ -378,13 +339,6 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     if filepath: st.rerun()
                 except Exception as e:
                     st.error("Koneksi Error. Silakan coba lagi.")
-
-# ==========================================
-# 7. ROUTER: DASHBOARD ADMIN
-# ==========================================
-# ==========================================
-# 7. ROUTER: DASHBOARD ADMIN
-# ==========================================
 elif st.session_state.page == "ADMIN":
     st.markdown("## 🛠️ OPTIMA CENTRAL ANALYTICS")
     if st.button("Keluar dari Dashboard (Logout)", type="primary"):
@@ -392,7 +346,6 @@ elif st.session_state.page == "ADMIN":
     
     with st.container(border=True):
         try:
-            # 🚀 AMBIL DATA DARI FIREBASE CLOUD
             tickets_ref = db.collection('rekap_tiket')
             docs = tickets_ref.stream()
             
@@ -426,9 +379,7 @@ elif st.session_state.page == "ADMIN":
                     fig_pie.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", font_color="#e0e0e0")
                     st.plotly_chart(fig_pie, use_container_width=True)
 
-                st.markdown("#### 📋 Database Log Enterprise (Cloud Firebase)")
-                
-                # 🔥 OBAT ABSOLUT: Menggunakan HTML murni agar teks memanjang ke bawah & tidak terpotong
+                st.markdown("#### 📋 Database Log Enterprise")
                 df_bersih = df.drop(columns=['Tanggal'], errors='ignore')
                 html_table = df_bersih.to_html(index=False, escape=False)
 
@@ -506,10 +457,6 @@ elif st.session_state.page == "ADMIN":
                 
         except Exception as e:
             st.error(f"Gagal mengambil data dari Firebase. Pastikan koneksi internet stabil. Detail: {e}")
-
-# ==========================================
-# 8. FOOTER
-# ==========================================
 st.markdown("""
 <div class="custom-footer">
     © 2026 IT Division | Optima Resolve Enterprise Identity Management
