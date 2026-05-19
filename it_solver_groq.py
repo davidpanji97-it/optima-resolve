@@ -192,7 +192,7 @@ elif st.session_state.page == "FORM_TIKET":
     if st.button("⬅️ Kembali ke Login"): logout()
 elif st.session_state.page == "CHAT_CONSOLE":
     st.markdown("## 🛡️ RAG-Powered Intelligent IT Service Desk")
-    st.markdown(f'<p style="color: #8b949e; margin-top: -10px;">Hi, {st.session_state.user_data["nama"]} ({st.session_state.user_data["divisi"]}) | Optima Console v3.0</p>', unsafe_allow_html=True)
+    st.markdown(f'<p style="color: #8b949e; margin-top: -10px;">Hi, {st.session_state.user_data["nama"]} ({st.session_state.user_data["divisi"]}) | Optima Console v4.0</p>', unsafe_allow_html=True)
     
     col_chat, col_info = st.columns([2.5, 1])
 
