@@ -294,7 +294,7 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     if message.get("image_path"): st.image(message["image_path"], width=300)
                     st.markdown(message["content"])
 
-        if prompt_input := st.chat_input("Ketik pesan balasan di sini... (Shift + Enter untuk baris baru)"):
+        if prompt_input := st.chat_input("Ketik pesan balasan di sini..."):
             filepath = None
             nama_file_foto = "Tidak ada lampiran"
             
@@ -332,8 +332,6 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     
                     st.markdown(full_response)
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
-                    
-                    # GABUNGKAN SELURUH CHAT UNTUK DITIMPA KE BARIS FIREBASE YANG SAMA
                     ud = st.session_state.user_data
                     wkt_simpan = st.session_state.get('waktu_awal', (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S"))
                     
