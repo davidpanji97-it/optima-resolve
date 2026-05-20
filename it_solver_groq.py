@@ -294,7 +294,12 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     if message.get("image_path"): st.image(message["image_path"], width=300)
                     st.markdown(message["content"])
 
-        if prompt_input := st.chat_input("Ketik pesan balasan di sini..."):
+        with st.container(border=True):
+            with st.form("form_balasan", clear_on_submit=True, border=False):
+                prompt_input = st.text_area("Ketik pesan balasan di sini", height=100)
+                btn_kirim = st.form_submit_button("Kirim Balasan")
+                
+        if btn_kirim and prompt_input != "":
             filepath = None
             nama_file_foto = "Tidak ada lampiran"
             
@@ -335,8 +340,8 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     ud = st.session_state.user_data
                     wkt_simpan = st.session_state.get('waktu_awal', (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S"))
                     
-                    semua_kendala = "\n\n---\n\n".join([f"USER:\n{m['content']}" for m in st.session_state.messages if m["role"] == "user"])
-                    semua_solusi = "\n\n---\n\n".join([f"AI:\n{m['content']}" for m in st.session_state.messages if m["role"] == "assistant"])
+                    semua_kendala = "\n\n".join([f"USER: {m['content']}" for m in st.session_state.messages if m["role"] == "user"])
+                    semua_solusi = "\n\n".join([f"AI: {m['content']}" for m in st.session_state.messages if m["role"] == "assistant"])
                     foto_final = nama_file_foto if nama_file_foto != "Tidak ada lampiran" else st.session_state.user_data.get('lampiran_awal', 'Tidak ada lampiran')
 
                     db.collection('rekap_tiket').document(st.session_state.ticket_id).set({
