@@ -147,52 +147,9 @@ if st.session_state.page == "LOGIN":
                     st.rerun()
                 else:
                     st.error("❌ Login Gagal. NIP atau Password tidak terdaftar di sistem HRD.")
-elif st.session_state.page == "FORM_TIKET":
-    st.markdown("## 📝 Buat Tiket Kendala Baru")
-    st.caption(f"Logged in as: NIP {st.session_state.user_data.get('nip', '')}")
-    
-    with st.form("form_keluhan", border=True):
-        st.markdown("#### Detail Pelapor (Terhubung dengan HRD)")
-        colA, colB = st.columns(2)
-        with colA:
-            nama = st.text_input("Nama Lengkap", value=st.session_state.user_data.get('nama', ''), disabled=True)
-            divisi = st.text_input("Divisi", value=st.session_state.user_data.get('divisi', ''), disabled=True)
-        with colB:
-            telepon = st.text_input("Nomor Telepon", value=st.session_state.user_data.get('telepon', ''), disabled=True)
-        
-        st.markdown("#### Deskripsi Masalah")
-        kendala = st.text_area("Ceritakan kendala IT yang Anda alami secara detail...", height=100)
-        
-        st.markdown("#### 📸 Lampirkan Foto Error / Bukti Kendala")
-        foto_awal = st.file_uploader("Pilih foto agar langsung terbaca admin bersama keluhan", type=['png', 'jpg', 'jpeg'])
-        
-        submitted = st.form_submit_button("🚀 Submit & Hubungkan ke Optima AI", type="primary")
-        
-        if submitted:
-            if kendala == "":
-                st.warning("⚠️ Deskripsi Kendala wajib diisi!")
-            else:
-                # Memproses foto jika di-upload
-                nama_file_foto = "Tidak ada lampiran"
-                if foto_awal:
-                    os.makedirs("attachments", exist_ok=True)
-                    nama_file_foto = f"{st.session_state.ticket_id}_{foto_awal.name}"
-                    filepath = f"attachments/{nama_file_foto}"
-                    with open(filepath, "wb") as f: 
-                        f.write(foto_awal.getbuffer())
-                
-                # Simpan keluhan dan lampiran ke session state
-                st.session_state.user_data['kendala_awal'] = kendala
-                st.session_state.user_data['lampiran_awal'] = nama_file_foto
-                
-                st.session_state.first_prompt_pending = True
-                st.session_state.page = "CHAT_CONSOLE"
-                st.rerun()
-    
-    if st.button("⬅️ Kembali ke Login"): logout()
 elif st.session_state.page == "CHAT_CONSOLE":
     st.markdown("## 🛡️ RAG-Powered Intelligent IT Service Desk")
-    st.markdown(f'<p style="color: #8b949e; margin-top: -10px;">Hi, {st.session_state.user_data["nama"]} ({st.session_state.user_data["divisi"]}) | Optima Console v4.0</p>', unsafe_allow_html=True)
+    st.markdown(f'<p style="color: #8b949e; margin-top: -10px;">Hi, {st.session_state.user_data["nama"]} ({st.session_state.user_data["divisi"]}) | Optima Console v3.0</p>', unsafe_allow_html=True)
     
     col_chat, col_info = st.columns([2.5, 1])
 
@@ -204,7 +161,6 @@ elif st.session_state.page == "CHAT_CONSOLE":
             info_placeholder = st.empty()
             def render_info():
                 info_placeholder.empty()
-                # Waktu Indonesia Barat (WIB) = UTC + 7
                 waktu_wib = datetime.utcnow() + timedelta(hours=7)
                 teks_info = f"""
                 **ID TIKET:** `{st.session_state.ticket_id}`  
@@ -260,16 +216,17 @@ elif st.session_state.page == "CHAT_CONSOLE":
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 st.session_state.first_prompt_pending = False
                 ud = st.session_state.user_data
-                wkt = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
-                db.collection('rekap_tiket').add({
-                    'Waktu': wkt,
+                st.session_state.waktu_awal = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
+                
+                db.collection('rekap_tiket').document(st.session_state.ticket_id).set({
+                    'Waktu': st.session_state.waktu_awal,
                     'ID Tiket': st.session_state.ticket_id,
                     'NIP': ud['nip'],
                     'Nama': ud['nama'],
                     'Divisi': ud['divisi'],
                     'Telepon': ud['telepon'],
-                    'Kendala': keluhan_awal,
-                    'Solusi': full_response,
+                    'Kendala': f"USER:\n{keluhan_awal}",
+                    'Solusi': f"AI:\n{full_response}",
                     'Lampiran': lampiran_awal
                 })
                     
@@ -321,17 +278,21 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     st.markdown(full_response)
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
                     ud = st.session_state.user_data
-                    wkt = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
-                    db.collection('rekap_tiket').add({
-                        'Waktu': wkt,
+                    
+                    semua_kendala = "\n\n---\n\n".join([f"USER:\n{m['content']}" for m in st.session_state.messages if m["role"] == "user"])
+                    semua_solusi = "\n\n---\n\n".join([f"AI:\n{m['content']}" for m in st.session_state.messages if m["role"] == "assistant"])
+                    foto_final = nama_file_foto if nama_file_foto != "Tidak ada lampiran" else st.session_state.user_data.get('lampiran_awal', 'Tidak ada lampiran')
+
+                    db.collection('rekap_tiket').document(st.session_state.ticket_id).set({
+                        'Waktu': st.session_state.waktu_awal,
                         'ID Tiket': st.session_state.ticket_id,
                         'NIP': ud['nip'],
                         'Nama': ud['nama'],
                         'Divisi': ud['divisi'],
                         'Telepon': ud['telepon'],
-                        'Kendala': teks_untuk_db,
-                        'Solusi': full_response,
-                        'Lampiran': nama_file_foto
+                        'Kendala': semua_kendala,
+                        'Solusi': semua_solusi,
+                        'Lampiran': foto_final
                     })
 
                     st.session_state.ticket_status = "Selesai (AI) ✅"
