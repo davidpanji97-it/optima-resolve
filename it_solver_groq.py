@@ -5,19 +5,26 @@ import json
 import string
 import random
 from datetime import datetime, timedelta
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from dotenv import load_dotenv
+
+# Konfigurasi Firebase NoSQL
 import firebase_admin
 from firebase_admin import credentials, firestore
+
+# Konfigurasi AI & RAG
 from groq import Groq
 from langchain_community.document_loaders import TextLoader
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import CharacterTextSplitter
+
 load_dotenv()
 api_key = os.getenv("GROQ_API_KEY")
+
 if not firebase_admin._apps:
     try:
         if "firebase_json" in st.secrets:
@@ -28,7 +35,9 @@ if not firebase_admin._apps:
         firebase_admin.initialize_app(cred)
     except Exception as e:
         st.error(f"Gagal memuat kunci Firebase. Error: {e}")
+
 db = firestore.client()
+
 @st.cache_resource
 def prepare_knowledge_base():
     """Mempersiapkan RAG (Retrieval-Augmented Generation) Database"""
@@ -40,6 +49,7 @@ def prepare_knowledge_base():
     return FAISS.from_documents(docs, embeddings)
 
 vector_db = prepare_knowledge_base()
+
 st.set_page_config(page_title="Optima Resolve", page_icon="🛡️", layout="wide")
 
 st.markdown("""
@@ -85,8 +95,8 @@ st.markdown("""
     .watermark { font-size: 10px; color: #58a6ff; opacity: 0.6; margin-top: -10px; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
+
 def generate_sequential_id():
-    """Membaca ID terakhir langsung dari Firebase Firestore"""
     prefix = "OPT-"
     try:
         tickets_ref = db.collection('rekap_tiket')
@@ -123,6 +133,7 @@ DATABASE_KARYAWAN = {
     "123456": {"pass": "testing123", "nama": "Public", "divisi": "Finance", "telepon": "0856-777-888"},
     "11223": {"pass": "honda123", "nama": "Andi Pratama", "divisi": "IT", "telepon": "0811-222-333"}
 }
+
 if st.session_state.page == "LOGIN":
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
@@ -147,9 +158,51 @@ if st.session_state.page == "LOGIN":
                     st.rerun()
                 else:
                     st.error("❌ Login Gagal. NIP atau Password tidak terdaftar di sistem HRD.")
+
+elif st.session_state.page == "FORM_TIKET":
+    st.markdown("## 📝 Buat Tiket Kendala Baru")
+    st.caption(f"Logged in as: NIP {st.session_state.user_data.get('nip', '')}")
+    
+    with st.form("form_keluhan", border=True):
+        st.markdown("#### Detail Pelapor (Terhubung dengan HRD)")
+        colA, colB = st.columns(2)
+        with colA:
+            nama = st.text_input("Nama Lengkap", value=st.session_state.user_data.get('nama', ''), disabled=True)
+            divisi = st.text_input("Divisi", value=st.session_state.user_data.get('divisi', ''), disabled=True)
+        with colB:
+            telepon = st.text_input("Nomor Telepon", value=st.session_state.user_data.get('telepon', ''), disabled=True)
+        
+        st.markdown("#### Deskripsi Masalah")
+        kendala = st.text_area("Ceritakan kendala IT yang Anda alami secara detail...", height=100)
+        
+        st.markdown("#### 📸 Lampirkan Foto Error / Bukti Kendala")
+        foto_awal = st.file_uploader("Pilih foto agar langsung terbaca admin bersama keluhan", type=['png', 'jpg', 'jpeg'])
+        
+        submitted = st.form_submit_button("🚀 Submit & Hubungkan ke Optima AI", type="primary")
+        
+        if submitted:
+            if kendala == "":
+                st.warning("⚠️ Deskripsi Kendala wajib diisi!")
+            else:
+                nama_file_foto = "Tidak ada lampiran"
+                if foto_awal:
+                    os.makedirs("attachments", exist_ok=True)
+                    nama_file_foto = f"{st.session_state.ticket_id}_{foto_awal.name}"
+                    filepath = f"attachments/{nama_file_foto}"
+                    with open(filepath, "wb") as f: 
+                        f.write(foto_awal.getbuffer())
+                
+                st.session_state.user_data['kendala_awal'] = kendala
+                st.session_state.user_data['lampiran_awal'] = nama_file_foto
+                st.session_state.first_prompt_pending = True
+                st.session_state.page = "CHAT_CONSOLE"
+                st.rerun()
+    
+    if st.button("⬅️ Kembali ke Login"): logout()
+
 elif st.session_state.page == "CHAT_CONSOLE":
     st.markdown("## 🛡️ RAG-Powered Intelligent IT Service Desk")
-    st.markdown(f'<p style="color: #8b949e; margin-top: -10px;">Hi, {st.session_state.user_data["nama"]} ({st.session_state.user_data["divisi"]}) | Optima Console v3.0</p>', unsafe_allow_html=True)
+    st.markdown(f'<p style="color: #8b949e; margin-top: -10px;">Hi, {st.session_state.user_data["nama"]} ({st.session_state.user_data["divisi"]}) | Optima Console v4.0</p>', unsafe_allow_html=True)
     
     col_chat, col_info = st.columns([2.5, 1])
 
@@ -215,6 +268,8 @@ elif st.session_state.page == "CHAT_CONSOLE":
                 
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 st.session_state.first_prompt_pending = False
+                
+                # SET WAKTU AWAL & KIRIM KE FIREBASE DENGAN .SET() AGAR HANYA 1 BARIS
                 ud = st.session_state.user_data
                 st.session_state.waktu_awal = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
                 
@@ -239,7 +294,7 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     if message.get("image_path"): st.image(message["image_path"], width=300)
                     st.markdown(message["content"])
 
-        if prompt_input := st.chat_input("Ketik pesan balasan di sini..."):
+        if prompt_input := st.chat_input("Ketik pesan balasan di sini... (Shift + Enter untuk baris baru)"):
             filepath = None
             nama_file_foto = "Tidak ada lampiran"
             
@@ -249,7 +304,7 @@ elif st.session_state.page == "CHAT_CONSOLE":
                 filepath = f"attachments/{nama_file_foto}"
                 with open(filepath, "wb") as f: f.write(foto_kendala.getbuffer())
                 st.session_state.uploader_key += 1
-                teks_untuk_db = f"[📸 FOTO TAMBAHAN TERLAMPIR] {prompt_input}"
+                teks_untuk_db = f"[📸 FOTO TAMBAHAN] {prompt_input}"
             else:
                 teks_untuk_db = prompt_input
                 
@@ -277,14 +332,17 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     
                     st.markdown(full_response)
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
+                    
+                    # GABUNGKAN SELURUH CHAT UNTUK DITIMPA KE BARIS FIREBASE YANG SAMA
                     ud = st.session_state.user_data
+                    wkt_simpan = st.session_state.get('waktu_awal', (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S"))
                     
                     semua_kendala = "\n\n---\n\n".join([f"USER:\n{m['content']}" for m in st.session_state.messages if m["role"] == "user"])
                     semua_solusi = "\n\n---\n\n".join([f"AI:\n{m['content']}" for m in st.session_state.messages if m["role"] == "assistant"])
                     foto_final = nama_file_foto if nama_file_foto != "Tidak ada lampiran" else st.session_state.user_data.get('lampiran_awal', 'Tidak ada lampiran')
 
                     db.collection('rekap_tiket').document(st.session_state.ticket_id).set({
-                        'Waktu': st.session_state.waktu_awal,
+                        'Waktu': wkt_simpan,
                         'ID Tiket': st.session_state.ticket_id,
                         'NIP': ud['nip'],
                         'Nama': ud['nama'],
@@ -300,6 +358,7 @@ elif st.session_state.page == "CHAT_CONSOLE":
                     if filepath: st.rerun()
                 except Exception as e:
                     st.error("Koneksi Error. Silakan coba lagi.")
+
 elif st.session_state.page == "ADMIN":
     st.markdown("## 🛠️ OPTIMA ANALYTICS")
     if st.button("Keluar dari Dashboard", type="primary"):
@@ -418,6 +477,7 @@ elif st.session_state.page == "ADMIN":
                 
         except Exception as e:
             st.error(f"Gagal mengambil data dari Firebase. Pastikan koneksi internet stabil. Detail: {e}")
+
 st.markdown("""
 <div class="custom-footer">
     © 2026 IT Division | Optima Resolve Enterprise Identity Management
