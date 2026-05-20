@@ -227,7 +227,7 @@ elif st.session_state.page == "CHAT_CONSOLE":
                 logout()
 
     with col_chat:
-        with st.container(height=550, border=True):
+        with st.container(border=True):
             with st.expander("📸 Upload Foto Tambahan"):
                 st.caption("Gunakan ini jika AI meminta screenshot tambahan saat obrolan berlangsung.")
                 foto_kendala = st.file_uploader("Pilih Foto Tambahan", type=['png', 'jpg', 'jpeg'], label_visibility="collapsed", key=f"upload_{st.session_state.uploader_key}")
