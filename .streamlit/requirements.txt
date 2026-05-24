@@ -7,3 +7,4 @@ python-dotenv
 pandas
 plotly
 firebase-admin
+python-docx
