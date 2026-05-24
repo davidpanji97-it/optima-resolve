@@ -186,7 +186,7 @@ if st.session_state.page == "HOME":
     with colB:
         with st.container(border=True):
             st.subheader("📄 SOP Generator")
-            st.write("Buat contoh Standard Operating Procedure (SOP) secara instan dan berstandar resmi.")
+            st.write("Operating Procedure (SOP) secara instan dan berstandar resmi.")
             if st.button("Buat Dokumen SOP", use_container_width=True, type="primary"):
                 if "nip" in st.session_state.user_data:
                     st.session_state.page = "SOP_MODULE"
