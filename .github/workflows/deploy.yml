@@ -1,0 +1,19 @@
+name: Deploy Optima Resolve to VPS
+on:
+  push:
+    branches: [ "main" ] # Robot jalan otomatis kalau ada kode baru di cabang 'main'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Mengirim perintah ke Server VPS via SSH
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: root
+        password: ${{ secrets.SERVER_PASSWORD }}
+        script: |
+          cd /path/ke/folder/app
+          git pull origin main
+          docker restart optima-app
