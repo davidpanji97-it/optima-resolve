@@ -471,14 +471,23 @@ elif st.session_state.page == "ADMIN":
                 if 'Prioritas' not in df.columns: df['Prioritas'] = '-'
                 if 'Status' not in df.columns: df['Status'] = 'Closed ✅'
                 
-                # MENGURUTKAN KOLOM DAN MENAMBAHKAN KOLOM 'No'
-                df = df.sort_values(by='Waktu', ascending=False)
-                df.insert(0, 'No', range(1, len(df) + 1))
-                kolom_direksi = ['No', 'Waktu', 'ID Tiket', 'Prioritas', 'NIP', 'Nama', 'Divisi', 'Kendala', 'Solusi', 'Lampiran', 'Status']
+                # PERBAIKAN FITUR PENOMORAN
+                # 1. Urutkan data berdasarkan Waktu (terbaru di atas) dan ID Tiket
+                df = df.sort_values(by=['Waktu', 'ID Tiket'], ascending=[False, False])
+                
+                # 2. Reset index bawaan Pandas yang berantakan
+                df = df.reset_index(drop=True)
+                
+                # 3. Jadikan penomoran 1, 2, 3... sebagai Index utama dengan nama 'No'
+                df.index = range(1, len(df) + 1)
+                df.index.name = 'No'
+                
+                # 4. Susun kolom (Tanpa memasukkan 'No' karena sudah otomatis jadi Index di paling kiri)
+                kolom_direksi = ['Waktu', 'ID Tiket', 'Prioritas', 'NIP', 'Nama', 'Divisi', 'Kendala', 'Solusi', 'Lampiran', 'Status']
                 df = df[[c for c in kolom_direksi if c in df.columns]]
             else:
-                df = pd.DataFrame(columns=['No', 'Waktu', 'ID Tiket', 'Prioritas', 'NIP', 'Nama', 'Divisi', 'Kendala', 'Solusi', 'Lampiran', 'Status'])
-
+                df = pd.DataFrame(columns=['Waktu', 'ID Tiket', 'Prioritas', 'NIP', 'Nama', 'Divisi', 'Kendala', 'Solusi', 'Lampiran', 'Status'])
+                df.index.name = 'No'
             if not df.empty:
                 col_chart1, col_chart2 = st.columns(2)
                 with col_chart1:
@@ -498,7 +507,7 @@ elif st.session_state.page == "ADMIN":
 
                 st.write("#### 📋 Database Log Enterprise")
                 df_bersih = df.drop(columns=['Tanggal'], errors='ignore')
-                st.dataframe(df_bersih, use_container_width=True, hide_index=True) 
+                st.dataframe(df_bersih, use_container_width=True) 
                 
                 st.divider()
                 st.write("#### 🔍 Inspektur Detail & Bukti Foto Tiket")
